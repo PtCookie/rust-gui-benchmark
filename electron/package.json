@@ -1,0 +1,2 @@
+{ "name": "bench-electron", "private": true, "version": "0.1.0", "main": "main.cjs",
+  "devDependencies": { "electron": "^38.0.0" } }

@@ -1,0 +1,130 @@
+name: cross-platform
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_RELEASE_DEBUG: "0"
+  CARGO_PROFILE_RELEASE_LTO: "off"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+  CARGO_TERM_COLOR: never
+
+jobs:
+  bench:
+    name: ${{ matrix.fw }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+        fw: [core, slint, tauri, gpui, electron]
+        include:
+          - { fw: core, dir: core }
+          - { fw: slint, dir: slint-app }
+          - { fw: tauri, dir: tauri/src-tauri }
+          - { fw: gpui, dir: gpui-app }
+          - { fw: electron, dir: electron/addon }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        if: matrix.fw == 'tauri' || matrix.fw == 'electron'
+        with:
+          node-version: 22
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install psutil
+
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          pkgs="xvfb openbox xauth libgl1-mesa-dri"
+          case "${{ matrix.fw }}" in
+            slint|gpui) pkgs="$pkgs libxkbcommon-x11-dev libxkbcommon-dev libwayland-dev libxcb1-dev libfontconfig-dev libfreetype-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev" ;;
+          esac
+          case "${{ matrix.fw }}" in
+            tauri) pkgs="$pkgs libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev" ;;
+            gpui) pkgs="$pkgs mesa-vulkan-drivers libvulkan1 libvulkan-dev cmake clang" ;;
+            electron) pkgs="$pkgs libgbm1 libnss3 libatk-bridge2.0-0t64 libgtk-3-0t64 libasound2t64 libxss1 libxtst6 libcups2t64" ;;
+          esac
+          sudo apt-get install -y --no-install-recommends $pkgs
+
+      - name: Metal toolchain (macOS gpui)
+        if: runner.os == 'macOS' && matrix.fw == 'gpui'
+        run: xcodebuild -downloadComponent MetalToolchain || true
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ matrix.dir }}
+
+      - name: Prepare data
+        if: matrix.fw != 'core'
+        run: |
+          mkdir -p data results
+          git clone --bare --filter=blob:none https://github.com/git/git.git data/git-blobless.git
+          python scripts/make_db.py data/events.db 1000000
+
+      - name: Core benchmark
+        if: matrix.fw == 'core'
+        run: |
+          mkdir -p data results
+          git clone --bare --filter=blob:none https://github.com/git/git.git data/git-blobless.git
+          python scripts/make_db.py data/events.db 1000000
+          cargo run --release --manifest-path core/Cargo.toml --bin core-bench -- data/git-blobless.git data/events.db 1000000 > results/core.json
+          python scripts/annotate.py json results/core.json "core/${{ runner.os }}/${{ runner.arch }}"
+
+      - name: Build web frontend
+        if: matrix.fw == 'tauri' || matrix.fw == 'electron'
+        run: cd web && npm ci && npm run build
+
+      - name: Build
+        if: matrix.fw != 'core'
+        run: |
+          mkdir -p results
+          cargo build --release --manifest-path ${{ matrix.dir }}/Cargo.toml 2>&1 | tee build.log
+          test ${PIPESTATUS[0]} -eq 0
+
+      - name: Electron addon + deps
+        if: matrix.fw == 'electron'
+        run: |
+          case "${{ runner.os }}" in
+            Linux) lib=libbench_electron_addon.so ;;
+            macOS) lib=libbench_electron_addon.dylib ;;
+            Windows) lib=bench_electron_addon.dll ;;
+          esac
+          cp electron/addon/target/release/$lib electron/addon.node
+          cd electron && npm ci
+
+      - name: Run (Linux, Xvfb)
+        if: runner.os == 'Linux' && matrix.fw != 'core'
+        run: xvfb-run -a -s "-screen 0 1280x800x24" bash scripts/ci_inner.sh ${{ matrix.fw }}
+
+      - name: Run
+        if: runner.os != 'Linux' && matrix.fw != 'core'
+        run: bash scripts/ci_inner.sh ${{ matrix.fw }}
+
+      - name: Build failure log
+        if: failure() && matrix.fw != 'core'
+        run: |
+          python scripts/annotate.py tail build.log "build failed: ${{ matrix.fw }}/${{ runner.os }}" 60
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: results-${{ matrix.fw }}-${{ runner.os }}
+          path: |
+            results
+            build.log
+          if-no-files-found: ignore

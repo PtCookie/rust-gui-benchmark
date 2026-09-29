@@ -1,0 +1,11 @@
+[package]
+name = "bench-slint"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+slint = { version = "1", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-software", "software-renderer-systemfonts", "unstable-winit-030"] }
+bench-core = { path = "../core" }
+serde_json = "1"
+
+[workspace]

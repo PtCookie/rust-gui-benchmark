@@ -1,0 +1,9 @@
+target/
+node_modules/
+data/
+results/
+web/dist/
+electron/addon.node
+tauri/src-tauri/gen/
+__pycache__/
+*.log
