@@ -165,8 +165,8 @@ impl Model for LazyGrid {
     fn model_tracker(&self) -> &dyn ModelTracker { &() }
 }
 
-fn pct(s: &[f64], p: f64) -> f64 { s[((s.len() - 1) as f64 * p) as usize] }
-fn mean(a: &[f64]) -> f64 { a.iter().sum::<f64>() / a.len() as f64 }
+fn pct(s: &[f64], p: f64) -> f64 { if s.is_empty() { 0.0 } else { s[((s.len() - 1) as f64 * p) as usize] } }
+fn mean(a: &[f64]) -> f64 { if a.is_empty() { 0.0 } else { a.iter().sum::<f64>() / a.len() as f64 } }
 
 fn main() {
     let t_start = Instant::now();
@@ -244,7 +244,11 @@ fn main() {
             if n > FRAMES {
                 timer3.stop();
                 rec_in.set(false);
-                let rd: Vec<f64> = redraws_in.borrow().windows(2).map(|w| (w[1] - w[0]).as_secs_f64() * 1e3).collect();
+                let raw_redraws = redraws_in.borrow().len();
+                let mut rd: Vec<f64> = redraws_in.borrow().windows(2).map(|w| (w[1] - w[0]).as_secs_f64() * 1e3).collect();
+                // some platforms (seen on macOS CI) never deliver RedrawRequested to the hook: fall back to timer cadence
+                let frame_source = if rd.is_empty() { rd = ints.clone(); "timer" } else { "redraw" };
+                eprintln!("slint: redraw events={raw_redraws} frame_source={frame_source}");
                 let mut rds = rd.clone(); rds.sort_by(|a, b| a.partial_cmp(b).unwrap());
                 // pure render cost: software-render full frames at scattered positions
                 let mut snap: Vec<f64> = Vec::new();
@@ -264,14 +268,14 @@ fn main() {
                     "framework": "slint", "scenario": if total > 500_000 { "grid" } else { "commits" }, "total": total,
                     "first_render_ms": first_render_ms, "core_load_ms": core_load_ms, "frames": FRAMES,
                     "interval_avg_ms": mean(&rd), "interval_p50_ms": pct(&rds, 0.5), "interval_p95_ms": pct(&rds, 0.95),
-                    "interval_p99_ms": pct(&rds, 0.99), "interval_max_ms": rds[rds.len() - 1],
+                    "interval_p99_ms": pct(&rds, 0.99), "interval_max_ms": rds.last().copied().unwrap_or(0.0), "frame_source": frame_source, "raw_redraws": raw_redraws,
                     "frames_over_33ms": rd.iter().filter(|x| **x > 33.4).count(),
                     "frames_over_50ms": rd.iter().filter(|x| **x > 50.0).count(),
                     "work_avg_ms": mean(&work), "work_p95_ms": pct(&sw, 0.95),
                     "frames_with_missing_rows": 0, "rows_scrolled": FRAMES as f32 * STEP_ROWS,
                     "redraw_count": rd.len() + 1,
                     "redraw_avg_ms": mean(&rd), "redraw_p50_ms": pct(&rds, 0.5), "redraw_p95_ms": pct(&rds, 0.95),
-                    "redraw_p99_ms": pct(&rds, 0.99), "redraw_max_ms": rds[rds.len() - 1],
+                    "redraw_p99_ms": pct(&rds, 0.99), "redraw_max_ms": rds.last().copied().unwrap_or(0.0),
                     "redraw_over_33ms": rd.iter().filter(|x| **x > 33.4).count(),
                     "timer_interval_avg_ms": mean(&ints),
                     "snapshot_render_avg_ms": snap_avg, "snapshot_render_p95_ms": snap_p95,
