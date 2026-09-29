@@ -32,18 +32,18 @@ jobs:
           - { fw: gpui, dir: gpui-app }
           - { fw: electron, dir: electron/addon }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: dtolnay/rust-toolchain@stable
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: matrix.fw == 'tauri' || matrix.fw == 'electron'
         with:
-          node-version: 22
+          node-version: 24
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
       - run: pip install psutil
 
       - name: Linux packages
@@ -120,7 +120,7 @@ jobs:
         run: |
           python scripts/annotate.py tail build.log "build failed: ${{ matrix.fw }}/${{ runner.os }}" 60
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: results-${{ matrix.fw }}-${{ runner.os }}
