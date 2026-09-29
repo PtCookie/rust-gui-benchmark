@@ -105,7 +105,7 @@ jobs:
             Windows) lib=bench_electron_addon.dll ;;
           esac
           cp electron/addon/target/release/$lib electron/addon.node
-          cd electron && npm ci
+          cd electron && npm ci && npx install-electron   # Electron >= 44 no longer downloads the binary on npm install
 
       - name: Run (Linux, Xvfb)
         if: runner.os == 'Linux' && matrix.fw != 'core'

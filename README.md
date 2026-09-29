@@ -129,7 +129,7 @@ cargo build --release --manifest-path electron/addon/Cargo.toml
 #   macOS  : electron/addon/target/release/libbench_electron_addon.dylib
 #   Windows: electron\addon\target\release\bench_electron_addon.dll
 cp electron/addon/target/release/libbench_electron_addon.so electron/addon.node
-(cd electron && npm ci)
+(cd electron && npm ci && npx install-electron)   # Electron 44+: npm install 시 바이너리를 받지 않으므로 별도 실행
 ```
 
 Windows PowerShell에서는 `cp`가 `Copy-Item`으로 동작하므로 경로만 위 표대로 바꾸면 됩니다.
@@ -177,6 +177,7 @@ python3 scripts/xbench.py --fw tauri --runs 3 --real-gpu --tag dmabuf-off --env 
 | GPUI 빌드에서 Metal 오류 (macOS) | `xcodebuild -downloadComponent MetalToolchain` 후 다시 빌드 |
 | Tauri가 시작 후 멈추거나 빈 화면 (Linux) | `WEBKIT_DISABLE_DMABUF_RENDERER=1`로 재시도 (위 `--env` 참고) |
 | Tauri 화면이 예전 프론트 그대로 | 프론트는 바이너리에 임베드됩니다. `web`을 다시 빌드하고 `touch tauri/src-tauri/src/main.rs` 후 재빌드 |
+| Electron 실행 파일이 없다는 오류 (`electron/dist`) | `cd electron && npx install-electron`으로 바이너리 받기 |
 | Electron이 `addon.node`를 못 찾음 | 4단계의 애드온 복사를 빠뜨림. OS별 라이브러리 이름 확인 |
 | Windows에서 시작 직후 한 번 크게 멈춤 | 백신 실시간 검사와 첫 파일 접근 영향으로 보입니다. 같은 조건에서 `--runs`를 늘려 중앙값을 보세요 |
 | `EBADENGINE` 경고 | Node가 24보다 낮음. `nvm use`(`.nvmrc`)로 24 LTS 사용 |
