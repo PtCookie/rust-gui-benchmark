@@ -10,7 +10,7 @@ const DB = process.env.BENCH_DB;
 let coreLoadMs = 0;
 
 app.commandLine.appendSwitch("no-sandbox");
-app.commandLine.appendSwitch("disable-gpu"); // no GPU in the test environment: software compositing
+if (process.env.BENCH_DISABLE_GPU === "1") app.commandLine.appendSwitch("disable-gpu"); // CI without a GPU
 app.commandLine.appendSwitch("disable-dev-shm-usage");
 
 ipcMain.handle("open", () => {

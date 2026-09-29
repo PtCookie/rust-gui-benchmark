@@ -37,11 +37,13 @@ def app_cmd(fw, target_dir):
     return [str(base / (name + EXE))]
 
 
-def app_env(fw):
+def app_env(fw, real_gpu=False):
     env = {}
     if fw == "slint":
         env["SLINT_BACKEND"] = "winit-software"
-    if fw == "gpui":
+    if fw == "electron" and not real_gpu:
+        env["BENCH_DISABLE_GPU"] = "1"  # CI runners have no GPU
+    if fw == "gpui" and not real_gpu:
         env["BENCH_FRAMES"] = "200"  # software rasterisation is slow; keep runs short
         env["ZED_ALLOW_EMULATED_GPU"] = "1"
         icds = glob.glob("/usr/share/vulkan/icd.d/lvp_icd*.json")
@@ -84,7 +86,7 @@ def run_one(fw, sc, i, a):
     for f in (base, ready):
         f.unlink(missing_ok=True)
     env = os.environ.copy()
-    env.update(app_env(fw))
+    env.update(app_env(fw, getattr(a, "real_gpu", False)))
     env.update(dict(kv.split("=", 1) for kv in a.env))
     env.update(BENCH_SCENARIO=sc, BENCH_OUT=str(base), BENCH_REPO=str(Path(a.data) / "git-blobless.git"),
                BENCH_DB=str(Path(a.data) / "events.db"))
@@ -158,6 +160,7 @@ def main():
     ap.add_argument("--tag", default="default")
     ap.add_argument("--env", action="append", default=[], help="KEY=VALUE, repeatable")
     ap.add_argument("--target-dir", default=None)
+    ap.add_argument("--real-gpu", action="store_true", help="real machine with a GPU: no software-rendering workarounds, full 900-frame GPUI run")
     ap.add_argument("--timeout", type=int, default=240)
     a = ap.parse_args()
 
