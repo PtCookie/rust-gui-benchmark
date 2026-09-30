@@ -46,6 +46,7 @@ slint::slint! {
                 VerticalLayout {
                     padding: 12px; spacing: 8px;
                     Text { color: #202020; wrap: word-wrap; text: "확인 항목: ① 한글 조합(ㅎ→하→한→한ㄱ→한글) 중 글자가 커서 위치에 밑줄로 표시되는가 ② 조합 중 Enter/Backspace/방향키 ③ 드래그 선택, Cmd/Ctrl+A·C·V·Z ④ IME 후보창이 커서 근처에 뜨는가 ⑤ 한/영 전환 ⑥ 이모지·한자 입력 ⑦ 조합 중 창 포커스를 바꿨다 돌아왔을 때"; }
+                    Text { color: #202020; text: "렌더링 확인(입력이 아니라 표시): 😀 👍 🎉 漢字 한글 ABC"; font-size: 16px; }
                     LineEdit { placeholder-text: "여기에 한글을 입력해 보세요 (한 줄)"; }
                     TextEdit { text: "여러 줄 입력 영역입니다.\n조합 중 줄바꿈과 붙여넣기를 확인해 보세요.\n"; }
                 }
@@ -100,6 +101,57 @@ fn gen_diff(n: usize) -> Vec<DiffLine> {
 fn pct(s: &[f64], p: f64) -> f64 { if s.is_empty() { 0.0 } else { s[((s.len() - 1) as f64 * p) as usize] } }
 fn mean(a: &[f64]) -> f64 { if a.is_empty() { 0.0 } else { a.iter().sum::<f64>() / a.len() as f64 } }
 
+/// Interactive mode only: log the raw winit input events, and work around Cmd+A/C/V/X/Z not
+/// working while a non-Latin input source (e.g. Korean 2-set) is selected on macOS.
+/// Slint matches its standard shortcuts against the key *text*; with the Korean input source that
+/// text is "ㅊ" for the C key, so Cmd+C never matches. We re-dispatch those shortcuts as Latin text.
+/// Disable with BENCH_CMD_FIX=0, silence the log with BENCH_LOG_INPUT=0.
+fn install_input_hooks(ui: &App) {
+    use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
+    use winit::event::{ElementState, WindowEvent as We};
+    use winit::keyboard::{Key, KeyCode, PhysicalKey};
+
+    let cmd_fix = std::env::var("BENCH_CMD_FIX").as_deref() != Ok("0");
+    let log_input = std::env::var("BENCH_LOG_INPUT").as_deref() != Ok("0");
+    eprintln!("widgets: cmd_fix={cmd_fix} log_input={log_input}");
+    let t0 = Instant::now();
+    let super_down = std::cell::Cell::new(false);
+    let weak = ui.as_weak();
+    ui.window().on_winit_window_event(move |_w, ev| {
+        let ms = t0.elapsed().as_secs_f64() * 1e3;
+        match ev {
+            We::ModifiersChanged(m) => super_down.set(m.state().super_key()),
+            We::KeyboardInput { event, .. } => {
+                if log_input && event.state == ElementState::Pressed {
+                    eprintln!("[{ms:9.1}] Key {:?} logical={:?} text={:?} cmd={}", event.physical_key, event.logical_key, event.text, super_down.get());
+                }
+                if cmd_fix && event.state == ElementState::Pressed && super_down.get() {
+                    if let PhysicalKey::Code(code) = event.physical_key {
+                        let latin = match code { KeyCode::KeyA => Some("a"), KeyCode::KeyC => Some("c"), KeyCode::KeyV => Some("v"),
+                            KeyCode::KeyX => Some("x"), KeyCode::KeyZ => Some("z"), _ => None };
+                        if let Some(t) = latin {
+                            let already = matches!(&event.logical_key, Key::Character(c) if c.eq_ignore_ascii_case(t));
+                            if !already {
+                                if log_input { eprintln!("[{ms:9.1}] cmd_fix: re-dispatching Cmd+{t}"); }
+                                weak.clone().upgrade_in_event_loop(move |ui| {
+                                    use slint::platform::WindowEvent as Se;
+                                    ui.window().dispatch_event(Se::KeyPressed { text: t.into() });
+                                    ui.window().dispatch_event(Se::KeyReleased { text: t.into() });
+                                }).ok();
+                                return EventResult::PreventDefault;
+                            }
+                        }
+                    }
+                }
+            }
+            We::Ime(i) if log_input => eprintln!("[{ms:9.1}] Ime {:?}", i),
+            We::Focused(f) if log_input => eprintln!("[{ms:9.1}] Focused({f})"),
+            _ => {}
+        }
+        EventResult::Propagate
+    });
+}
+
 fn main() {
     let t_start = Instant::now();
     let scenario = std::env::var("BENCH_SCENARIO").unwrap_or_default();
@@ -133,6 +185,7 @@ fn main() {
 
     if !bench {
         eprintln!("widgets: interactive mode (renderer via SLINT_BACKEND)");
+        install_input_hooks(&ui);
         slint::run_event_loop().unwrap();
         return;
     }
