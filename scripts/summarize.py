@@ -7,7 +7,7 @@ groups = collections.defaultdict(list)
 for f in sorted(glob.glob(f"{d}/*-*-*-[0-9].json")):
     r = json.load(open(f))
     if r.get("exit_code") == 0 and "error" not in r and (r.get("interval_avg_ms") is not None or r.get("idle_s") is not None):
-        m = re.match(r"^(.*)-(electron|tauri|slint-skia|slint|gpui)-(commits|grid|idle)-\d+$", f.replace("\\", "/").split("/")[-1][:-5])
+        m = re.match(r"^(.*)-(electron|tauri|slint-skia|slint-widgets|slint|gpui)-(commits|grid|idle|diff)-\d+$", f.replace("\\", "/").split("/")[-1][:-5])
         if m:
             groups[(m.group(2), m.group(3), m.group(1))].append(r)
 keys = ["ready_ms", "core_load_ms", "interval_avg_ms", "interval_p95_ms", "frames_over_33ms",

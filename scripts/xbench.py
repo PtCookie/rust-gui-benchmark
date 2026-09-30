@@ -31,8 +31,8 @@ def app_cmd(fw, target_dir):
         if OS == "Linux":
             cmd.append("--no-sandbox")
         return cmd + [str(ROOT / "electron" / "main.cjs")]
-    sub = {"tauri": "tauri/src-tauri", "slint": "slint-app", "slint-skia": "slint-app", "gpui": "gpui-app"}[fw]
-    name = {"tauri": "bench-tauri", "slint": "bench-slint", "slint-skia": "bench-slint", "gpui": "bench-gpui"}[fw]
+    sub = {"tauri": "tauri/src-tauri", "slint": "slint-app", "slint-skia": "slint-app", "slint-widgets": "slint-widgets", "gpui": "gpui-app"}[fw]
+    name = {"tauri": "bench-tauri", "slint": "bench-slint", "slint-skia": "bench-slint", "slint-widgets": "bench-widgets", "gpui": "bench-gpui"}[fw]
     tdir = "target-skia" if fw == "slint-skia" else "target"  # slint-skia: cargo build --features skia --target-dir slint-app/target-skia
     base = Path(target_dir) if target_dir else ROOT / sub / tdir / "release"
     return [str(base / (name + EXE))]
@@ -42,8 +42,8 @@ def app_env(fw, real_gpu=False):
     env = {}
     if fw == "slint":
         env["SLINT_BACKEND"] = "winit-software"
-    if fw == "slint-skia":
-        env["SLINT_BACKEND"] = "winit-skia"
+    if fw in ("slint-skia", "slint-widgets"):
+        env["SLINT_BACKEND"] = "winit-skia"  # slint-widgets has both renderers: override with --env SLINT_BACKEND=winit-software
     if fw == "electron" and not real_gpu:
         env["BENCH_DISABLE_GPU"] = "1"  # CI runners have no GPU
     if fw == "gpui" and not real_gpu:
@@ -186,8 +186,8 @@ def fmt(x, d=1):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--fw", required=True, choices=["electron", "tauri", "slint", "slint-skia", "gpui"])
-    ap.add_argument("--scenarios", default="commits,grid,idle", help="commits, grid (scroll fling) and idle (do nothing after startup)")
+    ap.add_argument("--fw", required=True, choices=["electron", "tauri", "slint", "slint-skia", "slint-widgets", "gpui"])
+    ap.add_argument("--scenarios", default=None, help="commits, grid (scroll fling), idle (do nothing after startup), diff (slint-widgets only). Default: commits,grid,idle (slint-widgets: diff,idle)")
     ap.add_argument("--idle-secs", type=float, default=10.0)
     ap.add_argument("--runs", type=int, default=2)
     ap.add_argument("--out", default="results")
@@ -198,6 +198,8 @@ def main():
     ap.add_argument("--real-gpu", action="store_true", help="real machine with a GPU: no software-rendering workarounds, full 900-frame GPUI run")
     ap.add_argument("--timeout", type=int, default=240)
     a = ap.parse_args()
+    if a.scenarios is None:
+        a.scenarios = "diff,idle" if a.fw == "slint-widgets" else "commits,grid,idle"
 
     failed_scenarios, md = [], []
     for sc in a.scenarios.split(","):

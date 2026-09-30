@@ -24,11 +24,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, macos-latest, windows-latest]
-        fw: [core, slint, slint-skia, tauri, gpui, electron]
+        fw: [core, slint, slint-skia, slint-widgets, tauri, gpui, electron]
         include:
           - { fw: core, dir: core }
           - { fw: slint, dir: slint-app }
           - { fw: slint-skia, dir: slint-app, cargo_args: "--features skia --target-dir slint-app/target-skia" }
+          - { fw: slint-widgets, dir: slint-widgets }
           - { fw: tauri, dir: tauri/src-tauri }
           - { fw: gpui, dir: gpui-app }
           - { fw: electron, dir: electron/addon }
@@ -53,11 +54,11 @@ jobs:
           sudo apt-get update
           pkgs="xvfb openbox xauth libgl1-mesa-dri"
           case "${{ matrix.fw }}" in
-            slint|slint-skia|gpui) pkgs="$pkgs libxkbcommon-x11-dev libxkbcommon-dev libwayland-dev libxcb1-dev libfontconfig-dev libfreetype-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev" ;;
+            slint|slint-skia|slint-widgets|gpui) pkgs="$pkgs libxkbcommon-x11-dev libxkbcommon-dev libwayland-dev libxcb1-dev libfontconfig-dev libfreetype-dev libx11-dev libxcursor-dev libxi-dev libxrandr-dev" ;;
           esac
           case "${{ matrix.fw }}" in
             tauri) pkgs="$pkgs libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev libxdo-dev libssl-dev" ;;
-            slint-skia) pkgs="$pkgs clang libgl1-mesa-dev libegl1-mesa-dev libvulkan-dev mesa-vulkan-drivers libvulkan1" ;;
+            slint-skia|slint-widgets) pkgs="$pkgs clang libgl1-mesa-dev libegl1-mesa-dev libvulkan-dev mesa-vulkan-drivers libvulkan1" ;;
             gpui) pkgs="$pkgs mesa-vulkan-drivers libvulkan1 libvulkan-dev cmake clang" ;;
             electron) pkgs="$pkgs libgbm1 libnss3 libatk-bridge2.0-0t64 libgtk-3-0t64 libasound2t64 libxss1 libxtst6 libcups2t64" ;;
           esac
@@ -72,7 +73,7 @@ jobs:
           workspaces: ${{ matrix.dir }}${{ matrix.fw == 'slint-skia' && ' -> target-skia' || '' }}
 
       - name: Prepare data
-        if: matrix.fw != 'core'
+        if: matrix.fw != 'core' && matrix.fw != 'slint-widgets'
         run: |
           mkdir -p data results
           git clone --bare --filter=blob:none https://github.com/git/git.git data/git-blobless.git

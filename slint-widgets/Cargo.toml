@@ -1,0 +1,12 @@
+[package]
+name = "bench-widgets"
+version = "0.1.0"
+edition = "2021"
+
+# Slint widget check: Korean IME input, a Git-style diff view, and a large read-only text.
+# One binary with both renderers; choose at run time with SLINT_BACKEND=winit-skia | winit-software.
+[dependencies]
+slint = { version = "1", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-software", "renderer-skia", "software-renderer-systemfonts", "unstable-winit-030"] }
+serde_json = "1"
+
+[workspace]

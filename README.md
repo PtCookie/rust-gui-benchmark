@@ -174,6 +174,33 @@ python3 scripts/xbench.py --fw tauri --runs 3 --real-gpu --tag dmabuf-off --env 
 
 기기 정보(CPU, GPU, OS, 주사율, 배율)를 결과와 함께 적어 두세요.
 
+## Slint 위젯 확인 (한글 입력 · Diff 뷰 · 큰 텍스트)
+
+스크롤 벤치마크로는 알 수 없는, 실제 Git/DB 클라이언트에 필요한 위젯 동작을 확인하는 작은 앱입니다 (`slint-widgets/`). 렌더러는 실행할 때 고릅니다.
+
+```bash
+cargo build --release --manifest-path slint-widgets/Cargo.toml     # Skia 바이너리를 내려받아 첫 빌드가 오래 걸립니다
+SLINT_BACKEND=winit-skia     slint-widgets/target/release/bench-widgets   # Skia (GPU)
+SLINT_BACKEND=winit-software slint-widgets/target/release/bench-widgets   # 소프트웨어 렌더러
+# Windows: slint-widgets\target\release\bench-widgets.exe (환경변수는 $env:SLINT_BACKEND="winit-skia")
+```
+
+창의 탭 세 개를 직접 써 보세요. 자동으로 확인할 수 없는 항목입니다.
+
+| 탭 | 확인할 것 |
+|---|---|
+| 한글 입력 | 조합 중 글자 표시(ㅎ→하→한→한글), 조합 중 Enter·Backspace·방향키, 드래그 선택과 복사·붙여넣기·실행 취소, IME 후보창이 커서 근처에 뜨는지, 한/영 전환, 이모지·한자 입력, 조합 중 포커스 이동 |
+| Diff 뷰 | 20만 줄 통합 diff(추가·삭제·헝크 색, 줄 번호, 한글·긴 줄)를 스크롤할 때 부드러운지, 마우스 휠·트랙패드·스크롤바 조작감. 이 뷰는 줄 단위 구문 강조나 가로 스크롤 없이 단순화한 것입니다 |
+| 큰 텍스트 | 버튼을 눌러 약 5MB 텍스트를 읽기 전용 `TextEdit`에 넣고, 로드 시간과 이후 스크롤·선택이 버벅이는지 |
+
+Diff 뷰의 스크롤은 자동 측정도 됩니다 (기본은 Skia 렌더러, 같은 방식의 `idle` 포함).
+
+```bash
+BENCH_HZ=144 python3 scripts/xbench.py --fw slint-widgets --runs 3 --real-gpu
+BENCH_HZ=144 python3 scripts/xbench.py --fw slint-widgets --runs 3 --real-gpu --tag software --env SLINT_BACKEND=winit-software
+python3 scripts/summarize.py
+```
+
 ## 트러블슈팅
 
 | 증상 | 원인과 해결 |

@@ -14,6 +14,10 @@ if [ "$fw" = tauri ] && [ "$(uname -s)" = Linux ]; then
   # WebKitGTK: compare the default renderer against the DMABUF renderer disabled
   run --tag webkit-default
   run --tag dmabuf-off --env WEBKIT_DISABLE_DMABUF_RENDERER=1
+elif [ "$fw" = slint-widgets ]; then
+  # one binary, two renderers
+  run --tag skia
+  run --tag software --env SLINT_BACKEND=winit-software
 else
   run --tag default
 fi
