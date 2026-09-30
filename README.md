@@ -220,7 +220,7 @@ python3 scripts/summarize.py
 | 조합 중 포커스 상실 | macOS와 같은 패턴을 로그로 확인: `Focused(false)` → `Ime Disabled`, `Commit` 없음. `ime_fix`가 발동해 조합 중 글자를 확정 (사용자 확인) |
 | 이모지 | 😀·👍는 흑백, 🎉만 컬러로 표시됨. 같은 글리프가 다른 앱(Claude 채팅)에서도 흑백으로 보여 Slint가 아니라 시스템 폰트 fallback(fontconfig) 문제로 판단 (사용자 확인). 입력용 이모지 피커는 Hyprland에 설정하지 않아 **미검증** |
 
-환경 로그로 확인한 실행 조건: `SLINT_BACKEND=winit-skia`, `XDG_SESSION_TYPE=wayland`, `WAYLAND_DISPLAY=wayland-1`, `XMODIFIERS`·`GTK_IM_MODULE`은 unset. 즉 XIM/GTK 모듈 경로가 아니라 Wayland 입력 프로토콜로 IME 이벤트가 온 것으로 보입니다(추정: 환경 변수가 없는데 조합 이벤트가 정상 도착). IME 프레임워크 종류(fcitx5/ibus)는 로그에 없습니다. 위 표의 결과는 이 조건에서 두 번의 실행(같은 결과)으로 확인했고, X11 세션이나 소프트웨어 렌더러는 시험하지 않았습니다. 시작 로그에는 이 환경 변수들이 매번 찍힙니다.
+환경 로그로 확인한 실행 조건: `SLINT_BACKEND=winit-skia`, `XDG_SESSION_TYPE=wayland`, `WAYLAND_DISPLAY=wayland-1`, `XMODIFIERS`·`GTK_IM_MODULE`은 unset. 즉 XIM/GTK 모듈 경로가 아니라 Wayland 입력 프로토콜로 IME 이벤트가 온 것으로 보입니다(추정: 환경 변수가 없는데 조합 이벤트가 정상 도착). 입력기는 fcitx5입니다(사용자 확인, 로그에는 없음). 위 표의 결과는 이 조건에서 두 번의 실행(같은 결과)으로 확인했고, X11 세션이나 소프트웨어 렌더러는 시험하지 않았습니다. 시작 로그에는 이 환경 변수들이 매번 찍힙니다.
 
 인터랙티브 실행 시 터미널에 winit 입력 이벤트(`Key`, `Ime`, `Focused`)가 시간과 함께 찍힙니다 (`BENCH_LOG_INPUT=0`으로 끔). Windows 결과는 아직 없습니다.
 
