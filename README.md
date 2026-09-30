@@ -227,7 +227,20 @@ python3 scripts/summarize.py
 - 조합 중 포커스를 잃을 때 KDE에서는 `Focused(false)` **앞에** `Ime Commit`이 먼저 옵니다(예: `Commit("강")` → `Focused(false)`). Hyprland에서는 `Commit` 없이 `Disabled`만 왔습니다. 컴포지터마다 다르므로 `ime_fix`는 그대로 두어야 하고, 마지막 조합 텍스트를 `Commit` 때 지우기 때문에 KDE에서 이중 입력은 없었습니다.
 - KDE에서는 키 입력마다 빈 `Ime Preedit("", None)`이 여러 번 찍힙니다. 입력에는 영향이 없었습니다(로그 노이즈).
 
-인터랙티브 실행 시 터미널에 winit 입력 이벤트(`Key`, `Ime`, `Focused`)가 시간과 함께 찍힙니다 (`BENCH_LOG_INPUT=0`으로 끔). Windows 결과는 아직 없습니다.
+#### Windows 실기기 확인 결과 (Windows 11 Home 26H2, 7800X3D / RX 7700 XT, 3840x2160 @1.25x 60Hz)
+
+위 Linux와 같은 머신을 Windows로 부팅해 확인했습니다(`SLINT_BACKEND=winit-skia`).
+
+| 항목 | 결과 |
+|---|---|
+| 한글 조합, 방향키, 드래그 선택, Ctrl+A/C/V/X/Z, 한/영 전환 | 정상 (사용자 확인). 한글 IME가 켜져 있을 때 키는 `logical=Named(Process)`로 오고, 조합 중이 아닐 때의 Ctrl 단축키는 라틴 문자로 도착하므로 별도 우회 없음 |
+| 조합 중 포커스 상실 | 로그: `Focused(false)` → `ime_fix`가 "누" 확정 → 이어서 Windows가 `Preedit("")`, `Commit("누")`, `Disabled`를 보냄. 사용자 확인: 문제 없음. 이 Commit은 Slint가 이미 포커스를 잃은 뒤에 도착하므로 macOS/Linux와 같은 유형의 문제(#10861)로 보이지만, `ime_fix`를 끄고 확인하지는 않아서 우회가 꼭 필요한지는 미확인 |
+| 한자 변환 | 조합 중 "위"에서 방향키와 Enter로 `Commit("爲")` 확인 |
+| 이모지 | 이모지 피커(Win+.)로 입력됨. `Ime Enabled` → `Commit("😊")` → `Disabled`로 도착합니다. macOS와 달리 이 경로는 동작합니다 |
+
+Windows에서는 음절이 넘어갈 때마다 `Commit` → `Disabled` → `Enabled`가 반복되고 조합 커서는 `(0, 0)`으로 보고됩니다(Linux는 `(3, 3)`). 입력에는 영향이 없었습니다.
+
+인터랙티브 실행 시 터미널에 winit 입력 이벤트(`Key`, `Ime`, `Focused`)가 시간과 함께 찍힙니다 (`BENCH_LOG_INPUT=0`으로 끔).
 
 ## 트러블슈팅
 
