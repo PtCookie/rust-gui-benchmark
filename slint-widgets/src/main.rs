@@ -112,7 +112,7 @@ fn install_input_hooks(ui: &App) {
     use winit::event::{ElementState, WindowEvent as We};
     use winit::keyboard::{Key, KeyCode, PhysicalKey};
 
-    let cmd_fix = std::env::var("BENCH_CMD_FIX").as_deref() != Ok("0");
+    let cmd_fix = cfg!(target_os = "macos") && std::env::var("BENCH_CMD_FIX").as_deref() != Ok("0"); // "super" is the Windows key elsewhere
     let ime_fix = std::env::var("BENCH_IME_FIX").as_deref() != Ok("0");
     let preedit = std::cell::RefCell::new(String::new());
     let log_input = std::env::var("BENCH_LOG_INPUT").as_deref() != Ok("0");
