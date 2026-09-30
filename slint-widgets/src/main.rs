@@ -211,6 +211,16 @@ fn main() {
 
     if !bench {
         eprintln!("widgets: interactive mode (renderer via SLINT_BACKEND)");
+        // 입력 동작은 세션 종류(Wayland/X11)와 IME 프레임워크에 좌우되므로 로그에 남긴다.
+        let vars = [
+            "SLINT_BACKEND", "XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP", "WAYLAND_DISPLAY", "DISPLAY",
+            "XMODIFIERS", "GTK_IM_MODULE", "QT_IM_MODULE", "SDL_IM_MODULE", "WINIT_UNIX_BACKEND",
+        ];
+        let env: Vec<String> = vars
+            .iter()
+            .map(|k| format!("{k}={}", std::env::var(k).unwrap_or_else(|_| "(unset)".into())))
+            .collect();
+        eprintln!("widgets: os={} arch={} {}", std::env::consts::OS, std::env::consts::ARCH, env.join(" "));
         install_input_hooks(&ui);
         slint::run_event_loop().unwrap();
         return;

@@ -203,7 +203,7 @@ python3 scripts/summarize.py
 
 ### 한글 입력 확인 결과와 알려진 문제 (macOS, Slint 1.18.1)
 
-macOS 실기기에서 확인한 것: 한글 조합, 조합 중 Enter/Backspace/방향키, 드래그 선택, 한/영 전환은 정상입니다. Diff 뷰와 큰 텍스트도 문제없었습니다.
+아래 표는 macOS 실기기 기준입니다 (Linux 결과는 표 아래). macOS에서 확인한 것: 한글 조합, 조합 중 Enter/Backspace/방향키, 드래그 선택, 한/영 전환은 정상입니다. Diff 뷰와 큰 텍스트도 문제없었습니다.
 
 | 증상 | 상태 |
 |---|---|
@@ -211,7 +211,18 @@ macOS 실기기에서 확인한 것: 한글 조합, 조합 중 Enter/Backspace/�
 | 이모지 입력이 안 됨 | 표시는 정상입니다 (탭 상단 "렌더링 확인" 줄). 이모지 피커(Ctrl+Cmd+Space)를 열면 창이 포커스를 잃고(`Focused(false)`), 고른 뒤에도 앱에는 `Ime Commit`이나 키 이벤트가 오지 않습니다 (macOS 실기기 로그로 확인). 원인은 winit의 알려진 이슈 [#3342](https://github.com/rust-windowing/winit/issues/3342)입니다: macOS 문자 뷰어의 `insertText:`는 조합 중인 텍스트가 있을 때만 전달됩니다. 이슈 논의에 나온 우회는 먼저 IME 조합을 시작해 두는 것이고, 앱에서 고칠 방법은 아직 없습니다. 붙여넣기(Cmd+V)로 넣은 이모지는 표시됩니다 |
 | 조합 중 포커스를 잃으면 조합 중이던 글자가 사라짐 | 원인 확인: winit는 포커스를 잃을 때 `Focused(false)` → `Ime Disabled`만 보내고 `Commit`을 보내지 않으며, Slint의 `TextInput`은 포커스 아웃 시 조합 중 텍스트(`preedit_text`)를 지웁니다 (Android에서만 먼저 확정). 이 앱은 마지막 조합 텍스트를 기억해 두었다가 `Focused(false)` 직전에 입력창에 확정해 주는 우회를 넣었습니다 (`BENCH_IME_FIX=0`으로 끔). **macOS에서 확인 완료** ("가", "나", "ㄷ" 조합 중 포커스 이동 모두 보존). 관련 이슈: [#10861](https://github.com/slint-ui/slint/issues/10861) |
 
-인터랙티브 실행 시 터미널에 winit 입력 이벤트(`Key`, `Ime`, `Focused`)가 시간과 함께 찍힙니다 (`BENCH_LOG_INPUT=0`으로 끔).
+#### Linux 실기기 확인 결과 (CachyOS, Hyprland 0.56 Wayland, 4K@60Hz)
+
+| 항목 | 결과 |
+|---|---|
+| 한글 조합, 조합 중 Enter/Backspace/방향키, Tab 이동 | 정상 (사용자 확인) |
+| Ctrl+A/C/V/X/Z (한글 입력 상태) | 키가 라틴 문자(`logical=Character("a")`)로 도착하므로 별도 우회 없이 동작. `cmd_fix`는 macOS 전용이라 꺼져 있음 |
+| 조합 중 포커스 상실 | macOS와 같은 패턴을 로그로 확인: `Focused(false)` → `Ime Disabled`, `Commit` 없음. `ime_fix`가 발동해 조합 중 글자를 확정 (사용자 확인) |
+| 이모지 | 표시는 일부 흑백으로 보임(폰트 fallback 추정, 미조사). 입력용 이모지 피커는 Hyprland에 설정하지 않아 **미검증** |
+
+이 결과의 IME 프레임워크(fcitx5/ibus)와 Wayland 네이티브 여부는 로그에 남기지 않아 확정하지 못했습니다. 이후 실행부터는 시작 로그에 `XDG_SESSION_TYPE`, `WAYLAND_DISPLAY`, `XMODIFIERS`, `GTK_IM_MODULE`, `SLINT_BACKEND` 등이 찍힙니다.
+
+인터랙티브 실행 시 터미널에 winit 입력 이벤트(`Key`, `Ime`, `Focused`)가 시간과 함께 찍힙니다 (`BENCH_LOG_INPUT=0`으로 끔). Windows 결과는 아직 없습니다.
 
 ## 트러블슈팅
 
@@ -230,7 +241,7 @@ macOS 실기기에서 확인한 것: 한글 조합, 조합 중 Enter/Backspace/�
 
 ## 크로스 플랫폼 CI
 
-`main`에 push하거나 Actions 탭에서 수동 실행하면 ubuntu / macos / windows × (core, slint, tauri, gpui, electron) 15개 잡이 빌드와 실행을 검증합니다. 러너에는 GPU가 없어서 절대 성능이 아니라 "각 OS에서 빌드되고 돌아가는가"를 보는 용도입니다. 결과는 각 잡의 어노테이션, 요약, artifact(`results-*`)에 남습니다.
+`main`에 push하거나 Actions 탭에서 수동 실행하면 ubuntu / macos / windows × (core, slint, slint-skia, slint-widgets, tauri, gpui, electron) 21개 잡이 빌드와 실행을 검증합니다. 러너에는 GPU가 없어서 절대 성능이 아니라 "각 OS에서 빌드되고 돌아가는가"를 보는 용도입니다. 결과는 각 잡의 어노테이션, 요약, artifact(`results-*`)에 남습니다.
 
 ## 버전
 
