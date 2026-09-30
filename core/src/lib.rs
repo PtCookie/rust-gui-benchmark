@@ -286,13 +286,21 @@ pub fn grid_page(c: &Connection, offset: i64, limit: i64) -> Vec<GridRow> {
     .collect()
 }
 
+/// resident set size of this process in KiB (Linux: /proc, macOS/Windows: memory-stats)
 pub fn rss_kb() -> u64 {
-    std::fs::read_to_string("/proc/self/status")
-        .ok()
-        .and_then(|s| {
-            s.lines()
-                .find(|l| l.starts_with("VmRSS:"))
-                .and_then(|l| l.split_whitespace().nth(1)?.parse().ok())
-        })
-        .unwrap_or(0)
+    #[cfg(target_os = "linux")]
+    {
+        std::fs::read_to_string("/proc/self/status")
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find(|l| l.starts_with("VmRSS:"))
+                    .and_then(|l| l.split_whitespace().nth(1)?.parse().ok())
+            })
+            .unwrap_or(0)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        memory_stats::memory_stats().map(|m| m.physical_mem as u64 / 1024).unwrap_or(0)
+    }
 }

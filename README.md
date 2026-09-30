@@ -162,8 +162,10 @@ python3 scripts/xbench.py --fw tauri --runs 3 --real-gpu --tag dmabuf-off --env 
 | core load ms | 코어가 데이터를 읽는 시간. 프레임워크와 무관하므로 `ready`에서 빼면 프레임워크 오버헤드 |
 | frame avg / p95 ms | 스크롤 중 프레임 간격. **모니터 주사율이 상한**입니다 (60Hz면 16.7ms, 120Hz면 8.3ms). 주사율이 다른 기기끼리는 이 값을 직접 비교하지 마세요 |
 | >33ms frames | 60Hz 기준 두 프레임 이상 끊긴 횟수 |
-| CPU ms/frame | 프레임당 프로세스 트리 전체 CPU 시간. 주사율의 영향을 덜 받는 지표 |
-| PSS / RSS MB | 준비 후 메모리 중앙값. PSS는 Linux에서만 나오고 공유 페이지를 나눠 셉니다. macOS/Windows는 RSS라서 웹뷰 계열이 실제보다 크게 나올 수 있습니다 |
+| fps | `1000 / frame avg`. 주사율이 다른 프레임워크끼리는 이 값과 아래 CPU %로 비교하세요 |
+| CPU ms/frame | 프레임당 프로세스 트리 전체 CPU 시간. fps가 다르면 직접 비교할 수 없습니다 |
+| CPU % of 1 core | `CPU ms/frame × fps`. 코어 1개를 100%로 본 초당 CPU 사용률 (멀티 프로세스 합계라 100% 초과 가능) |
+| PSS / RSS MB | 준비 후 메모리 중앙값. macOS의 Tauri는 앱 밖에서 도는 `com.apple.WebKit.*` 프로세스 중 실행 후 새로 생긴 것을 합산합니다 (측정 중 Safari 등 WebKit 앱을 새로 열지 마세요). PSS는 Linux에서만 나오고 공유 페이지를 나눠 셉니다. macOS/Windows는 RSS라서 웹뷰 계열이 실제보다 크게 나올 수 있습니다 |
 
 기기 정보(CPU, GPU, OS, 주사율, 배율)를 결과와 함께 적어 두세요.
 
@@ -172,7 +174,7 @@ python3 scripts/xbench.py --fw tauri --runs 3 --real-gpu --tag dmabuf-off --env 
 | 증상 | 원인과 해결 |
 |---|---|
 | `xbench.py`가 `run failed`와 `exit=101` | `results/*.log` 끝부분 확인. 데이터 경로(`data/git-blobless.git`, `data/events.db`)가 맞는지 확인 |
-| Slint가 macOS에서 프레임 값이 이상함 | CI의 macOS 러너에서는 Slint가 리드로 이벤트를 받지 못해(원인 미확인) **타이머 간격**으로 대체했습니다. 이 경우 JSON의 `frame_source`가 `timer`이고 실제 렌더 간격이 아닙니다. 실기기에서는 `redraw`로 나오는지 확인하세요 |
+| Slint 프레임 값이 이상함 (macOS) | CI의 macOS 러너에서는 Slint가 리드로 이벤트를 받지 못해(원인 미확인) **타이머 간격**으로 대체했습니다. 이 경우 JSON의 `frame_source`가 `timer`이고 실제 렌더 간격이 아닙니다. Slint는 모니터 주사율(`display_hz`, `BENCH_HZ` 환경변수로 강제 가능)에 맞춰 스크롤을 구동합니다. 실기기에서는 `redraw`로 나오는지 확인하세요 |
 | GPUI가 창만 뜨고 진행이 없음 | Linux/X11에서는 창 관리자가 필요합니다. Vulkan이 소프트웨어(lavapipe)로 잡혔는지 `vulkaninfo --summary` 확인 |
 | GPUI 빌드에서 Metal 오류 (macOS) | `xcodebuild -downloadComponent MetalToolchain` 후 다시 빌드 |
 | Tauri가 시작 후 멈추거나 빈 화면 (Linux) | `WEBKIT_DISABLE_DMABUF_RENDERER=1`로 재시도 (위 `--env` 참고) |

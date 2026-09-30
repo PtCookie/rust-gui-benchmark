@@ -205,6 +205,18 @@ fn main() {
             EventResult::Propagate
         });
     }
+    // drive the scroll at the display's refresh rate (BENCH_HZ overrides), like rAF / GPUI frame callbacks do
+    let display_hz: f64 = std::env::var("BENCH_HZ").ok().and_then(|v| v.parse().ok()).unwrap_or_else(|| {
+        use slint::winit_030::WinitWindowAccessor;
+        ui.window()
+            .with_winit_window(|w| w.current_monitor().and_then(|m| m.refresh_rate_millihertz()))
+            .flatten()
+            .map(|mhz| mhz as f64 / 1000.0)
+            .filter(|hz| *hz >= 30.0 && *hz <= 500.0)
+            .unwrap_or(60.0)
+    });
+    let tick = Duration::from_secs_f64(1.0 / display_hz);
+    eprintln!("slint: display refresh {display_hz:.1} Hz");
     let (redraws_in, rec_in) = (redraws.clone(), recording.clone());
     let ui_weak = ui.as_weak();
     let out2 = out.clone();
@@ -230,7 +242,7 @@ fn main() {
         let ui_weak = ui_weak.clone();
         let out = out2.clone();
         let timer3 = timer2.clone();
-        timer2.start(slint::TimerMode::Repeated, Duration::from_micros(16667), move || {
+        timer2.start(slint::TimerMode::Repeated, tick, move || {
             let now = Instant::now();
             let w0 = now;
             if n == 0 { redraws_in.borrow_mut().clear(); rec_in.set(true); }
@@ -268,7 +280,7 @@ fn main() {
                     "framework": "slint", "scenario": if total > 500_000 { "grid" } else { "commits" }, "total": total,
                     "first_render_ms": first_render_ms, "core_load_ms": core_load_ms, "frames": FRAMES,
                     "interval_avg_ms": mean(&rd), "interval_p50_ms": pct(&rds, 0.5), "interval_p95_ms": pct(&rds, 0.95),
-                    "interval_p99_ms": pct(&rds, 0.99), "interval_max_ms": rds.last().copied().unwrap_or(0.0), "frame_source": frame_source, "raw_redraws": raw_redraws,
+                    "interval_p99_ms": pct(&rds, 0.99), "interval_max_ms": rds.last().copied().unwrap_or(0.0), "frame_source": frame_source, "display_hz": display_hz, "raw_redraws": raw_redraws,
                     "frames_over_33ms": rd.iter().filter(|x| **x > 33.4).count(),
                     "frames_over_50ms": rd.iter().filter(|x| **x > 50.0).count(),
                     "work_avg_ms": mean(&work), "work_p95_ms": pct(&sw, 0.95),

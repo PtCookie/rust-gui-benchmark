@@ -47,7 +47,7 @@ fn main() {
         "max_lanes".into(),
         rows_v.iter().map(|r| r.width).max().unwrap_or(0).into(),
     );
-    out.insert("core_rss_after_load_mb".into(), ((rss_kb() - rss0) as f64 / 1024.0).into());
+    out.insert("core_rss_after_load_mb".into(), (rss_kb().saturating_sub(rss0) as f64 / 1024.0).into());
 
     // ---- IPC payload cost: whole vec vs 500-row chunks
     let t = Instant::now();
@@ -95,7 +95,7 @@ fn main() {
     let t = Instant::now();
     let all = grid_page(&c, 0, n);
     out.insert("db_load_all_ms".into(), ms(t).into());
-    out.insert("db_load_all_rss_mb".into(), ((rss_kb() - rss1) as f64 / 1024.0).into());
+    out.insert("db_load_all_rss_mb".into(), (rss_kb().saturating_sub(rss1) as f64 / 1024.0).into());
     out.insert("db_load_all_len".into(), all.len().into());
 
     println!("{}", serde_json::to_string_pretty(&out).unwrap());

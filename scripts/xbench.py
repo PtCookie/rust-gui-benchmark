@@ -52,12 +52,27 @@ def app_env(fw, real_gpu=False):
     return env
 
 
-def sample(proc):
+def webkit_helpers(baseline):
+    """macOS: WKWebView runs WebContent/GPU/Networking as XPC services that are NOT children of the app.
+    Count the ones that appeared after `baseline` (pids seen before launch) as belonging to the app."""
+    out = []
+    for q in psutil.process_iter(["pid", "name"]):
+        try:
+            if q.info["pid"] not in baseline and (q.info["name"] or "").startswith("com.apple.WebKit."):
+                out.append(q)
+        except (psutil.Error, OSError):
+            pass
+    return out
+
+
+def sample(proc, baseline=None):
     rss = pss = cpu = 0.0
     try:
         procs = [proc] + proc.children(recursive=True)
     except psutil.Error:
         return rss, pss, cpu, []
+    if baseline is not None:
+        procs += [q for q in webkit_helpers(baseline) if q not in procs]
     for q in procs:
         try:
             m = q.memory_full_info() if OS == "Linux" else q.memory_info()
@@ -92,6 +107,7 @@ def run_one(fw, sc, i, a):
                BENCH_DB=str(Path(a.data) / "events.db"))
     logf = open(str(base) + ".log", "w")
     t0 = time.monotonic()
+    baseline = {q.pid for q in psutil.process_iter()} if (fw == "tauri" and OS == "Darwin") else None
     try:
         p = subprocess.Popen(app_cmd(fw, a.target_dir), env=env, cwd=ROOT, stdout=logf, stderr=subprocess.STDOUT)
     except OSError as e:
@@ -104,10 +120,10 @@ def run_one(fw, sc, i, a):
         now = time.monotonic()
         if ready_ms is None and ready.exists():
             ready_ms = (now - t0) * 1000
-            cpu_at_ready = sample(proc)[2]
+            cpu_at_ready = sample(proc, baseline)[2]
         if now - last >= 0.25:
             last = now
-            rss, pss, cpu, procs = sample(proc)
+            rss, pss, cpu, procs = sample(proc, baseline)
             if procs:
                 last_procs = procs
             rss_all.append(rss)
@@ -137,6 +153,12 @@ def run_one(fw, sc, i, a):
         cpu_at_ready_s=cpu_at_ready,
         cpu_ms_per_frame=((cpu_max - cpu_at_ready) / frames * 1000) if cpu_at_ready is not None else None,
     )
+    iv = res.get("interval_avg_ms")
+    if iv:
+        res["fps"] = 1000.0 / iv
+        if res.get("cpu_ms_per_frame") is not None:
+            # CPU time per second of wall clock, in % of one core (100 = one core fully busy; >100 = multi-core)
+            res["cpu_core_pct"] = res["cpu_ms_per_frame"] * res["fps"] / 10.0
     json.dump(res, open(base, "w"), indent=2)
     return res
 
@@ -183,18 +205,18 @@ def main():
             failed_scenarios.append(sc)
             continue
         m = {k: med(ok, k) for k in ("ready_ms", "core_load_ms", "interval_avg_ms", "interval_p95_ms",
-                                     "interval_max_ms", "frames_over_33ms", "cpu_ms_per_frame",
+                                     "interval_max_ms", "frames_over_33ms", "fps", "cpu_ms_per_frame", "cpu_core_pct",
                                      "rss_after_ready_median_mb", "pss_after_ready_median_mb", "rss_peak_mb")}
         line = " ".join(f"{k}={fmt(v, 1)}" for k, v in m.items() if v is not None)
         annotate("notice", f"result {a.fw}/{sc}/{OS}/{platform.machine()}/{a.tag} n={len(ok)}", line)
         md.append(f"| {a.fw} | {sc} | {OS} | {a.tag} | {len(ok)} | {fmt(m['ready_ms'], 0)} | "
-                  f"{fmt(m['interval_avg_ms'], 2)} | {fmt(m['interval_p95_ms'])} | {fmt(m['frames_over_33ms'], 0)} | "
-                  f"{fmt(m['cpu_ms_per_frame'])} | {fmt(m['rss_after_ready_median_mb'], 0)} |")
+                  f"{fmt(m['interval_avg_ms'], 2)} | {fmt(m['fps'], 0)} | {fmt(m['interval_p95_ms'])} | {fmt(m['frames_over_33ms'], 0)} | "
+                  f"{fmt(m['cpu_ms_per_frame'])} | {fmt(m['cpu_core_pct'], 0)} | {fmt(m['rss_after_ready_median_mb'], 0)} |")
     summ = os.environ.get("GITHUB_STEP_SUMMARY")
     if summ and md:
         with open(summ, "a") as f:
-            f.write("| fw | scenario | os | tag | runs | ready ms | frame avg ms | p95 | >33ms | CPU ms/frame | RSS MB |\n"
-                    "|---|---|---|---|---|---|---|---|---|---|---|\n" + "\n".join(md) + "\n")
+            f.write("| fw | scenario | os | tag | runs | ready ms | frame avg ms | fps | p95 | >33ms | CPU ms/frame | CPU % of 1 core | RSS MB |\n"
+                    "|---|---|---|---|---|---|---|---|---|---|---|---|---|\n" + "\n".join(md) + "\n")
     return 1 if failed_scenarios else 0
 
 

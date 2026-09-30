@@ -13,6 +13,7 @@ path = "src/bin/core_bench.rs"
 [dependencies]
 git2 = { version = "0.21.0", default-features = false }
 gix = { version = "0.88.0", default-features = false, features = ["revision", "max-performance-safe", "sha1"] }
+memory-stats = "1"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
