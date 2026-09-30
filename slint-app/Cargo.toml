@@ -9,3 +9,7 @@ bench-core = { path = "../core" }
 serde_json = "1"
 
 [workspace]
+
+[features]
+# GPU renderer variant: cargo build --release --features skia --target-dir target-skia, run with SLINT_BACKEND=winit-skia
+skia = ["slint/renderer-skia"]

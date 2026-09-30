@@ -16,7 +16,7 @@ app.commandLine.appendSwitch("disable-dev-shm-usage");
 ipcMain.handle("open", () => {
   const info = addon.open(scenario, REPO, DB);
   coreLoadMs = info.coreLoadMs;
-  return { scenario: info.scenario, total: info.total, max_width: info.maxWidth };
+  return { scenario: info.scenario, total: info.total, max_width: info.maxWidth, mode: process.env.BENCH_MODE || "", idle_secs: Number(process.env.BENCH_IDLE_SECS || 10) };
 });
 ipcMain.handle("commits_chunk", (_e, a) => addon.commitsChunk(a.offset, a.count));
 ipcMain.handle("grid_page", (_e, a) => addon.gridPage(a.offset, a.count));

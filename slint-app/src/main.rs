@@ -229,6 +229,20 @@ fn main() {
     });
     let first_render_ms = t_start.elapsed().as_secs_f64() * 1e3 + 50.0;
 
+    if std::env::var("BENCH_MODE").as_deref() == Ok("idle") {
+        // idle scenario: nothing scheduled after the UI is up; report and quit after `idle_secs`
+        let idle_secs: f64 = std::env::var("BENCH_IDLE_SECS").ok().and_then(|v| v.parse().ok()).unwrap_or(10.0);
+        let out_i = out.clone();
+        slint::Timer::single_shot(Duration::from_millis(50) + Duration::from_secs_f64(idle_secs), move || {
+            let r = serde_json::json!({ "framework": "slint", "scenario": "idle", "idle_s": idle_secs, "total": total,
+                "core_load_ms": core_load_ms, "first_render_ms": first_render_ms });
+            std::fs::write(&out_i, serde_json::to_string_pretty(&r).unwrap()).ok();
+            slint::quit_event_loop().ok();
+        });
+        slint::run_event_loop().unwrap();
+        return;
+    }
+
     let timer = Rc::new(slint::Timer::default());
     let timer2 = timer.clone();
     slint::Timer::single_shot(Duration::from_millis(750), move || {

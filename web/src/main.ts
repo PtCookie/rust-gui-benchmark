@@ -191,6 +191,12 @@ async function main() {
   mark("s0_before_ready");
   await call("ready");
   mark("s1_after_ready");
+  if (info.mode === "idle") {
+    // idle scenario: do nothing after the UI is up, let the harness sample CPU and memory
+    await sleep((info.idle_secs ?? 10) * 1000);
+    await call("report", { scenario: "idle", total, idle_s: info.idle_secs ?? 10, first_render_ms: firstRenderMs });
+    return;
+  }
   await sleep(700);
   mark("s2_after_sleep");
 

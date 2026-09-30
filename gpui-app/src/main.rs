@@ -34,6 +34,7 @@ fn fmt_date(secs: i64) -> String {
 enum Phase {
     Warmup,
     Run,
+    Idle,
 }
 
 struct Bench {
@@ -57,6 +58,7 @@ struct Bench {
     frames: usize,
     proc_total_ms: f64,
     proc_calls: usize,
+    idle_secs: Option<f64>,
 }
 
 impl Bench {
@@ -108,13 +110,26 @@ impl Render for Bench {
                     std::fs::write(format!("{}.ready", self.out), "").ok();
                     self.ready_at = Some(now);
                 }
-                if let Some(r) = self.ready_at {
+                if let (Some(secs), Some(_)) = (self.idle_secs, self.ready_at) {
+                    // idle scenario: stop requesting frames, report and exit after `secs`
+                    self.phase = Phase::Idle;
+                    let (out, first, core, total) = (self.out.clone(), self.first_render_ms, self.core_load_ms, self.total);
+                    std::thread::spawn(move || {
+                        std::thread::sleep(Duration::from_secs_f64(secs));
+                        let r = serde_json::json!({ "framework": "gpui", "scenario": "idle", "idle_s": secs,
+                            "total": total, "core_load_ms": core, "first_render_ms": first });
+                        std::fs::write(&out, serde_json::to_string_pretty(&r).unwrap()).ok();
+                        std::process::exit(0);
+                    });
+                }
+                if let Some(r) = self.ready_at.filter(|_| self.phase == Phase::Warmup) {
                     if now - r >= Duration::from_millis(700) {
                         self.phase = Phase::Run;
                         self.last = now;
                     }
                 }
             }
+            Phase::Idle => {}
             Phase::Run => {
                 self.ints.push((now - self.last).as_secs_f64() * 1e3);
                 self.last = now;
@@ -132,7 +147,9 @@ impl Render for Bench {
                 }
             }
         }
-        window.request_animation_frame();
+        if self.phase != Phase::Idle {
+            window.request_animation_frame();
+        }
 
         let list: AnyElement = if self.commits_mode {
             let gw = self.graph_w;
@@ -314,6 +331,8 @@ fn main() {
     let scenario = std::env::var("BENCH_SCENARIO").unwrap_or_else(|_| "commits".into());
     let out = std::env::var("BENCH_OUT").unwrap_or_else(|_| "/tmp/bench-gpui.json".into());
     let commits_mode = scenario == "commits";
+    let idle_secs: Option<f64> = (std::env::var("BENCH_MODE").as_deref() == Ok("idle"))
+        .then(|| std::env::var("BENCH_IDLE_SECS").ok().and_then(|v| v.parse().ok()).unwrap_or(10.0));
     let frames: usize = std::env::var("BENCH_FRAMES").ok().and_then(|v| v.parse().ok()).unwrap_or(900);
 
     let t = Instant::now();
@@ -358,6 +377,7 @@ fn main() {
                     frames,
                     proc_total_ms: 0.0,
                     proc_calls: 0,
+                    idle_secs,
                 })
             },
         )

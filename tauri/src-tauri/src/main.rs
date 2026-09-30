@@ -28,7 +28,11 @@ async fn open() -> serde_json::Value {
         (n, 1)
     };
     *CORE_MS.lock().unwrap() = t.elapsed().as_secs_f64() * 1e3;
-    serde_json::json!({ "scenario": scenario, "total": total, "max_width": mw })
+    serde_json::json!({
+        "scenario": scenario, "total": total, "max_width": mw,
+        "mode": std::env::var("BENCH_MODE").unwrap_or_default(),
+        "idle_secs": std::env::var("BENCH_IDLE_SECS").ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(10.0),
+    })
 }
 
 #[tauri::command]

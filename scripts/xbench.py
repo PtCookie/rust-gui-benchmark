@@ -31,9 +31,10 @@ def app_cmd(fw, target_dir):
         if OS == "Linux":
             cmd.append("--no-sandbox")
         return cmd + [str(ROOT / "electron" / "main.cjs")]
-    sub = {"tauri": "tauri/src-tauri", "slint": "slint-app", "gpui": "gpui-app"}[fw]
-    name = {"tauri": "bench-tauri", "slint": "bench-slint", "gpui": "bench-gpui"}[fw]
-    base = Path(target_dir) if target_dir else ROOT / sub / "target" / "release"
+    sub = {"tauri": "tauri/src-tauri", "slint": "slint-app", "slint-skia": "slint-app", "gpui": "gpui-app"}[fw]
+    name = {"tauri": "bench-tauri", "slint": "bench-slint", "slint-skia": "bench-slint", "gpui": "bench-gpui"}[fw]
+    tdir = "target-skia" if fw == "slint-skia" else "target"  # slint-skia: cargo build --features skia --target-dir slint-app/target-skia
+    base = Path(target_dir) if target_dir else ROOT / sub / tdir / "release"
     return [str(base / (name + EXE))]
 
 
@@ -41,6 +42,8 @@ def app_env(fw, real_gpu=False):
     env = {}
     if fw == "slint":
         env["SLINT_BACKEND"] = "winit-software"
+    if fw == "slint-skia":
+        env["SLINT_BACKEND"] = "winit-skia"
     if fw == "electron" and not real_gpu:
         env["BENCH_DISABLE_GPU"] = "1"  # CI runners have no GPU
     if fw == "gpui" and not real_gpu:
@@ -103,8 +106,10 @@ def run_one(fw, sc, i, a):
     env = os.environ.copy()
     env.update(app_env(fw, getattr(a, "real_gpu", False)))
     env.update(dict(kv.split("=", 1) for kv in a.env))
-    env.update(BENCH_SCENARIO=sc, BENCH_OUT=str(base), BENCH_REPO=str(Path(a.data) / "git-blobless.git"),
+    env.update(BENCH_SCENARIO="commits" if sc == "idle" else sc, BENCH_OUT=str(base), BENCH_REPO=str(Path(a.data) / "git-blobless.git"),
                BENCH_DB=str(Path(a.data) / "events.db"))
+    if sc == "idle":
+        env.update(BENCH_MODE="idle", BENCH_IDLE_SECS=str(a.idle_secs))
     logf = open(str(base) + ".log", "w")
     t0 = time.monotonic()
     baseline = {q.pid for q in psutil.process_iter()} if (fw == "tauri" and OS == "Darwin") else None
@@ -115,12 +120,14 @@ def run_one(fw, sc, i, a):
     proc = psutil.Process(p.pid)
     ready_ms = cpu_at_ready = None
     cpu_max, last, timed_out, last_procs = 0.0, 0.0, False, []
+    ready_t = cpu_max_t = None
     rss_after, pss_after, rss_all = [], [], []
     while True:
         now = time.monotonic()
         if ready_ms is None and ready.exists():
             ready_ms = (now - t0) * 1000
             cpu_at_ready = sample(proc, baseline)[2]
+            ready_t = now
         if now - last >= 0.25:
             last = now
             rss, pss, cpu, procs = sample(proc, baseline)
@@ -130,7 +137,8 @@ def run_one(fw, sc, i, a):
             if ready_ms is not None:
                 rss_after.append(rss)
                 pss_after.append(pss)
-            cpu_max = max(cpu_max, cpu)
+            if cpu > cpu_max:
+                cpu_max, cpu_max_t = cpu, now
         if p.poll() is not None:
             break
         if now - t0 > a.timeout:
@@ -151,8 +159,12 @@ def run_one(fw, sc, i, a):
         rss_after_ready_median_mb=statistics.median(rss_after) if rss_after else None,
         pss_after_ready_median_mb=statistics.median(pss_after) if pss_after and OS == "Linux" else None,
         cpu_at_ready_s=cpu_at_ready,
-        cpu_ms_per_frame=((cpu_max - cpu_at_ready) / frames * 1000) if cpu_at_ready is not None else None,
+        cpu_ms_per_frame=((cpu_max - cpu_at_ready) / frames * 1000) if (cpu_at_ready is not None and sc != "idle") else None,
     )
+    if sc == "idle" and cpu_at_ready is not None and cpu_max_t is not None and cpu_max_t > ready_t:
+        # CPU used between ready and the last sample, as % of one core while the app does nothing
+        res["idle_cpu_pct"] = (cpu_max - cpu_at_ready) / (cpu_max_t - ready_t) * 100.0
+        res["cpu_ms_per_frame"] = None
     iv = res.get("interval_avg_ms")
     if iv:
         res["fps"] = 1000.0 / iv
@@ -174,8 +186,9 @@ def fmt(x, d=1):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--fw", required=True, choices=["electron", "tauri", "slint", "gpui"])
-    ap.add_argument("--scenarios", default="commits,grid")
+    ap.add_argument("--fw", required=True, choices=["electron", "tauri", "slint", "slint-skia", "gpui"])
+    ap.add_argument("--scenarios", default="commits,grid,idle", help="commits, grid (scroll fling) and idle (do nothing after startup)")
+    ap.add_argument("--idle-secs", type=float, default=10.0)
     ap.add_argument("--runs", type=int, default=2)
     ap.add_argument("--out", default="results")
     ap.add_argument("--data", default="data")
@@ -191,9 +204,9 @@ def main():
         ok = []
         for i in range(1, a.runs + 1):
             r = run_one(a.fw, sc, i, a)
-            good = r.get("exit_code") == 0 and "error" not in r and r.get("interval_avg_ms") is not None
+            good = r.get("exit_code") == 0 and "error" not in r and (r.get("idle_s") is not None if sc == "idle" else r.get("interval_avg_ms") is not None)
             print(f"[{a.fw}/{sc}/{a.tag}] run {i}: exit={r.get('exit_code')} timeout={r.get('timed_out')} "
-                  f"ready={fmt(r.get('ready_ms'), 0)}ms frame_avg={fmt(r.get('interval_avg_ms'), 2)}ms", flush=True)
+                  f"ready={fmt(r.get('ready_ms'), 0)}ms frame_avg={fmt(r.get('interval_avg_ms'), 2)}ms idle_cpu={fmt(r.get('idle_cpu_pct'))}%", flush=True)
             if good:
                 ok.append(r)
             else:
@@ -205,18 +218,18 @@ def main():
             failed_scenarios.append(sc)
             continue
         m = {k: med(ok, k) for k in ("ready_ms", "core_load_ms", "interval_avg_ms", "interval_p95_ms",
-                                     "interval_max_ms", "frames_over_33ms", "fps", "cpu_ms_per_frame", "cpu_core_pct",
+                                     "interval_max_ms", "frames_over_33ms", "fps", "cpu_ms_per_frame", "cpu_core_pct", "idle_cpu_pct",
                                      "rss_after_ready_median_mb", "pss_after_ready_median_mb", "rss_peak_mb")}
         line = " ".join(f"{k}={fmt(v, 1)}" for k, v in m.items() if v is not None)
         annotate("notice", f"result {a.fw}/{sc}/{OS}/{platform.machine()}/{a.tag} n={len(ok)}", line)
         md.append(f"| {a.fw} | {sc} | {OS} | {a.tag} | {len(ok)} | {fmt(m['ready_ms'], 0)} | "
                   f"{fmt(m['interval_avg_ms'], 2)} | {fmt(m['fps'], 0)} | {fmt(m['interval_p95_ms'])} | {fmt(m['frames_over_33ms'], 0)} | "
-                  f"{fmt(m['cpu_ms_per_frame'])} | {fmt(m['cpu_core_pct'], 0)} | {fmt(m['rss_after_ready_median_mb'], 0)} |")
+                  f"{fmt(m['cpu_ms_per_frame'])} | {fmt(m['cpu_core_pct'], 0)} | {fmt(m['idle_cpu_pct'])} | {fmt(m['rss_after_ready_median_mb'], 0)} |")
     summ = os.environ.get("GITHUB_STEP_SUMMARY")
     if summ and md:
         with open(summ, "a") as f:
-            f.write("| fw | scenario | os | tag | runs | ready ms | frame avg ms | fps | p95 | >33ms | CPU ms/frame | CPU % of 1 core | RSS MB |\n"
-                    "|---|---|---|---|---|---|---|---|---|---|---|---|---|\n" + "\n".join(md) + "\n")
+            f.write("| fw | scenario | os | tag | runs | ready ms | frame avg ms | fps | p95 | >33ms | CPU ms/frame | CPU % of 1 core | idle CPU % | RSS MB |\n"
+                    "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n" + "\n".join(md) + "\n")
     return 1 if failed_scenarios else 0
 
 

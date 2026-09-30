@@ -9,7 +9,7 @@ if [ "$(uname -s)" = Linux ]; then
   sleep 2
 fi
 rc=0
-run() { python scripts/xbench.py --fw "$fw" --scenarios commits,grid --runs "$RUNS" --out results --data data "$@" || rc=1; }
+run() { python scripts/xbench.py --fw "$fw" --runs "$RUNS" --out results --data data "$@" || rc=1; }
 if [ "$fw" = tauri ] && [ "$(uname -s)" = Linux ]; then
   # WebKitGTK: compare the default renderer against the DMABUF renderer disabled
   run --tag webkit-default

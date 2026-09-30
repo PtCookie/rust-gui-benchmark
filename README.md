@@ -12,11 +12,11 @@ Linux/Xvfb/GPU 없음 환경에서 잰 결과와 해석은 [`REPORT.md`](REPORT.
 | `web/` | Electron·Tauri 공용 프론트엔드 (TypeScript, Vite) |
 | `electron/` | Electron 앱 + napi-rs 애드온(`electron/addon`) |
 | `tauri/src-tauri/` | Tauri 2 앱 |
-| `slint-app/` | Slint 앱 (소프트웨어 렌더러) |
+| `slint-app/` | Slint 앱. 기본은 소프트웨어 렌더러, `--features skia`로 Skia(GPU) 렌더러 변형 (`slint-skia`) |
 | `gpui-app/` | GPUI 앱 (GPU 필요) |
 | `scripts/` | `xbench.py` 측정 하니스, `make_db.py` 데이터 생성, `summarize.py` 결과 표 |
 
-시나리오는 두 가지입니다. `commits`(git/git 저장소 커밋 약 8.2만 개, 그래프 열 포함 가상 리스트)와 `grid`(SQLite 100만 행 가상 그리드). 빠른 스크롤(프레임당 90행) 900프레임 동안 프레임 간격, CPU, 메모리를 잽니다.
+시나리오는 세 가지입니다. `commits`(git/git 저장소 커밋 약 8.2만 개, 그래프 열 포함 가상 리스트)와 `grid`(SQLite 100만 행 가상 그리드). 앞의 둘은 빠른 스크롤(프레임당 90행) 900프레임 동안 프레임 간격, CPU, 메모리를 잽니다. 세 번째 `idle`은 commits 화면을 띄운 뒤 10초간 아무것도 하지 않고 유휴 CPU와 메모리를 잽니다 (`--idle-secs`로 조절). 대부분 유휴 상태인 실제 앱의 배터리·발열 지표입니다.
 
 ## 요구사항
 
@@ -111,8 +111,11 @@ JSON이 출력됩니다. 커밋 82,327개, 최대 레인 281이 나와야 데이
 실제 성능 측정이므로 반드시 `--release`입니다. 첫 빌드는 5~20분 걸립니다.
 
 ```bash
-# Slint
+# Slint (소프트웨어 렌더러)
 cargo build --release --manifest-path slint-app/Cargo.toml
+
+# Slint (Skia GPU 렌더러, 첫 빌드는 Skia 바이너리를 내려받아 더 오래 걸립니다)
+cargo build --release --manifest-path slint-app/Cargo.toml --features skia --target-dir slint-app/target-skia
 
 # GPUI
 cargo build --release --manifest-path gpui-app/Cargo.toml
@@ -138,6 +141,7 @@ Windows PowerShell에서는 `cp`가 `Copy-Item`으로 동작하므로 경로만 
 
 ```bash
 python3 scripts/xbench.py --fw slint    --runs 3 --real-gpu
+python3 scripts/xbench.py --fw slint-skia --runs 3 --real-gpu
 python3 scripts/xbench.py --fw gpui     --runs 3 --real-gpu
 python3 scripts/xbench.py --fw tauri    --runs 3 --real-gpu
 python3 scripts/xbench.py --fw electron --runs 3 --real-gpu
@@ -146,7 +150,7 @@ python3 scripts/summarize.py             # 중앙값 표
 
 - 실행 중에는 앱 창이 뜹니다. **창을 가리거나 최소화하거나 다른 창을 조작하지 마세요.** 가려지면 프레임이 멈춥니다. 한 번에 약 10~30초입니다.
 - `--real-gpu`는 GPU가 있는 기기용입니다. 이 옵션이 없으면 CI용 설정(Electron GPU 끔, GPUI 소프트웨어 Vulkan·200프레임)으로 동작합니다. Slint는 소프트웨어 렌더러라서 옵션과 무관합니다.
-- 시나리오를 하나만 돌리려면 `--scenarios commits` 또는 `--scenarios grid`, 진행 로그와 앱 출력은 `results/*.log`에 남습니다.
+- 시나리오를 고르려면 `--scenarios commits`, `grid`, `idle` (쉼표로 조합), 진행 로그와 앱 출력은 `results/*.log`에 남습니다.
 - Linux에서 Tauri는 WebKitGTK 렌더러 설정에 따라 성능이 크게 달라집니다. 비교하려면 태그를 나눠서 돌리세요.
 
 ```bash
@@ -165,6 +169,7 @@ python3 scripts/xbench.py --fw tauri --runs 3 --real-gpu --tag dmabuf-off --env 
 | fps | `1000 / frame avg`. 주사율이 다른 프레임워크끼리는 이 값과 아래 CPU %로 비교하세요 |
 | CPU ms/frame | 프레임당 프로세스 트리 전체 CPU 시간. fps가 다르면 직접 비교할 수 없습니다 |
 | CPU % of 1 core | `CPU ms/frame × fps`. 코어 1개를 100%로 본 초당 CPU 사용률 (멀티 프로세스 합계라 100% 초과 가능) |
+| idle CPU % | `idle` 시나리오에서 준비 후 CPU 사용률 (코어 1개 = 100%). 스크롤 시나리오의 CPU 값과 달리 아무 조작도 없는 상태입니다 |
 | PSS / RSS MB | 준비 후 메모리 중앙값. macOS의 Tauri는 앱 밖에서 도는 `com.apple.WebKit.*` 프로세스 중 실행 후 새로 생긴 것을 합산합니다 (측정 중 Safari 등 WebKit 앱을 새로 열지 마세요). PSS는 Linux에서만 나오고 공유 페이지를 나눠 셉니다. macOS/Windows는 RSS라서 웹뷰 계열이 실제보다 크게 나올 수 있습니다 |
 
 기기 정보(CPU, GPU, OS, 주사율, 배율)를 결과와 함께 적어 두세요.
