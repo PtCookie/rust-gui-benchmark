@@ -105,6 +105,7 @@ fn mean(a: &[f64]) -> f64 { if a.is_empty() { 0.0 } else { a.iter().sum::<f64>()
 /// working while a non-Latin input source (e.g. Korean 2-set) is selected on macOS.
 /// Slint matches its standard shortcuts against the key *text*; with the Korean input source that
 /// text is "ㅊ" for the C key, so Cmd+C never matches. We re-dispatch those shortcuts as Latin text.
+/// Also commits a pending IME composition when the window loses focus (BENCH_IME_FIX=0 disables).
 /// Disable with BENCH_CMD_FIX=0, silence the log with BENCH_LOG_INPUT=0.
 fn install_input_hooks(ui: &App) {
     use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
@@ -112,8 +113,10 @@ fn install_input_hooks(ui: &App) {
     use winit::keyboard::{Key, KeyCode, PhysicalKey};
 
     let cmd_fix = std::env::var("BENCH_CMD_FIX").as_deref() != Ok("0");
+    let ime_fix = std::env::var("BENCH_IME_FIX").as_deref() != Ok("0");
+    let preedit = std::cell::RefCell::new(String::new());
     let log_input = std::env::var("BENCH_LOG_INPUT").as_deref() != Ok("0");
-    eprintln!("widgets: cmd_fix={cmd_fix} log_input={log_input}");
+    eprintln!("widgets: cmd_fix={cmd_fix} ime_fix={ime_fix} log_input={log_input}");
     let t0 = Instant::now();
     let super_down = std::cell::Cell::new(false);
     let weak = ui.as_weak();
@@ -144,8 +147,31 @@ fn install_input_hooks(ui: &App) {
                     }
                 }
             }
-            We::Ime(i) if log_input => eprintln!("[{ms:9.1}] Ime {:?}", i),
-            We::Focused(f) if log_input => eprintln!("[{ms:9.1}] Focused({f})"),
+            We::Ime(i) => {
+                if log_input { eprintln!("[{ms:9.1}] Ime {:?}", i); }
+                match i {
+                    winit::event::Ime::Preedit(t, _) => *preedit.borrow_mut() = t.clone(),
+                    winit::event::Ime::Commit(_) => preedit.borrow_mut().clear(),
+                    _ => {}
+                }
+            }
+            We::Focused(f) => {
+                if log_input { eprintln!("[{ms:9.1}] Focused({f})"); }
+                // Slint's TextInput drops the IME composition on focus-out (it only commits it on Android),
+                // and winit sends no Commit when the window loses focus. Commit the pending composition ourselves,
+                // while the window is still active, by typing it into the focused text field.
+                if !*f && ime_fix {
+                    let pending = std::mem::take(&mut *preedit.borrow_mut());
+                    if !pending.is_empty() {
+                        if log_input { eprintln!("[{ms:9.1}] ime_fix: committing pending composition {pending:?}"); }
+                        if let Some(ui) = weak.upgrade() {
+                            use slint::platform::WindowEvent as Se;
+                            ui.window().dispatch_event(Se::KeyPressed { text: pending.as_str().into() });
+                            ui.window().dispatch_event(Se::KeyReleased { text: pending.as_str().into() });
+                        }
+                    }
+                }
+            }
             _ => {}
         }
         EventResult::Propagate
