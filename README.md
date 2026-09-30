@@ -222,6 +222,11 @@ python3 scripts/summarize.py
 
 환경 로그로 확인한 실행 조건: `SLINT_BACKEND=winit-skia`, `XDG_SESSION_TYPE=wayland`, `WAYLAND_DISPLAY=wayland-1`, `XMODIFIERS`·`GTK_IM_MODULE`은 unset. 즉 XIM/GTK 모듈 경로가 아니라 Wayland 입력 프로토콜로 IME 이벤트가 온 것으로 보입니다(추정: 환경 변수가 없는데 조합 이벤트가 정상 도착). 입력기는 fcitx5입니다(사용자 확인, 로그에는 없음). 위 표의 결과는 이 조건에서 두 번의 실행(같은 결과)으로 확인했고, X11 세션이나 소프트웨어 렌더러는 시험하지 않았습니다. 시작 로그에는 이 환경 변수들이 매번 찍힙니다.
 
+같은 머신의 **KDE Plasma(Wayland, `XDG_CURRENT_DESKTOP=KDE`, `winit-skia`)** 세션에서도 위젯을 확인했고, 사용자 판단으로 Hyprland와 동일하게 동작합니다. 로그로 본 차이는 두 가지입니다.
+
+- 조합 중 포커스를 잃을 때 KDE에서는 `Focused(false)` **앞에** `Ime Commit`이 먼저 옵니다(예: `Commit("강")` → `Focused(false)`). Hyprland에서는 `Commit` 없이 `Disabled`만 왔습니다. 컴포지터마다 다르므로 `ime_fix`는 그대로 두어야 하고, 마지막 조합 텍스트를 `Commit` 때 지우기 때문에 KDE에서 이중 입력은 없었습니다.
+- KDE에서는 키 입력마다 빈 `Ime Preedit("", None)`이 여러 번 찍힙니다. 입력에는 영향이 없었습니다(로그 노이즈).
+
 인터랙티브 실행 시 터미널에 winit 입력 이벤트(`Key`, `Ime`, `Focused`)가 시간과 함께 찍힙니다 (`BENCH_LOG_INPUT=0`으로 끔). Windows 결과는 아직 없습니다.
 
 ## 트러블슈팅
