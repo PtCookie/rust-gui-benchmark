@@ -209,7 +209,7 @@ python3 scripts/summarize.py
 |---|---|
 | **한글 입력 소스에서** Cmd+A/C/V/X/Z가 안 됨 (영어 입력 소스에서는 됨) | 원인: Slint가 단축키를 키의 *텍스트*로 판별하는데(`"c"`), 한글 2벌식에서는 C 키의 텍스트가 `ㅊ`이라 매치되지 않습니다. 이 앱은 물리 키가 A/C/V/X/Z이고 Cmd가 눌렸고 텍스트가 라틴 문자가 아니면 라틴 텍스트로 다시 넣어 주는 우회를 넣었습니다 (macOS 전용, `BENCH_CMD_FIX=0`으로 끔). **macOS에서 한글 입력 소스로 확인 완료** |
 | 이모지 입력이 안 됨 | 표시는 정상입니다 (탭 상단 "렌더링 확인" 줄). 이모지 피커(Ctrl+Cmd+Space)를 열면 창이 포커스를 잃고(`Focused(false)`), 고른 뒤에도 앱에는 `Ime Commit`이나 키 이벤트가 오지 않습니다 (macOS 실기기 로그로 확인). 원인은 winit의 알려진 이슈 [#3342](https://github.com/rust-windowing/winit/issues/3342)입니다: macOS 문자 뷰어의 `insertText:`는 조합 중인 텍스트가 있을 때만 전달됩니다. 이슈 논의에 나온 우회는 먼저 IME 조합을 시작해 두는 것이고, 앱에서 고칠 방법은 아직 없습니다. 붙여넣기(Cmd+V)로 넣은 이모지는 표시됩니다 |
-| 조합 중 포커스를 잃으면 조합 중이던 글자가 사라짐 | 원인 확인: winit는 포커스를 잃을 때 `Focused(false)` → `Ime Disabled`만 보내고 `Commit`을 보내지 않으며, Slint의 `TextInput`은 포커스 아웃 시 조합 중 텍스트(`preedit_text`)를 지웁니다 (Android에서만 먼저 확정). 이 앱은 마지막 조합 텍스트를 기억해 두었다가 `Focused(false)` 직전에 입력창에 확정해 주는 우회를 넣었습니다 (`BENCH_IME_FIX=0`으로 끔). **macOS에서 확인 완료** ("가", "나", "ㄷ" 조합 중 포커스 이동 모두 보존). 관련 이슈: [#10861](https://github.com/slint-ui/slint/issues/10861) |
+| 조합 중 포커스를 잃으면 조합 중이던 글자가 사라짐 | 원인 확인: winit는 포커스를 잃을 때 `Focused(false)` → `Ime Disabled`만 보내고 `Commit`을 보내지 않으며, Slint의 `TextInput`은 포커스 아웃 시 조합 중 텍스트(`preedit_text`)를 지웁니다 (Android에서만 먼저 확정). 이 앱은 마지막 조합 텍스트를 기억해 두었다가 `Focused(false)` 직전에 입력창에 확정해 주는 우회를 넣었습니다 (`BENCH_IME_FIX=0`으로 끔). **macOS에서 확인 완료** ("가", "나", "ㄷ" 조합 중 포커스 이동 모두 보존). `BENCH_IME_FIX=0`으로 끈 실행에서는 `Focused(false)` → `Ime Disabled`만 오고 글자가 사라져서(사용자 확인) **우회가 필요함을 재확인**했습니다. 관련 이슈: [#10861](https://github.com/slint-ui/slint/issues/10861) |
 
 #### Linux 실기기 확인 결과 (CachyOS, Hyprland 0.56 Wayland, 4K@60Hz)
 
@@ -234,7 +234,7 @@ python3 scripts/summarize.py
 | 항목 | 결과 |
 |---|---|
 | 한글 조합, 방향키, 드래그 선택, Ctrl+A/C/V/X/Z, 한/영 전환 | 정상 (사용자 확인). 한글 IME가 켜져 있을 때 키는 `logical=Named(Process)`로 오고, 조합 중이 아닐 때의 Ctrl 단축키는 라틴 문자로 도착하므로 별도 우회 없음 |
-| 조합 중 포커스 상실 | 로그: `Focused(false)` → `ime_fix`가 "누" 확정 → 이어서 Windows가 `Preedit("")`, `Commit("누")`, `Disabled`를 보냄. 사용자 확인: 문제 없음. 이 Commit은 Slint가 이미 포커스를 잃은 뒤에 도착하므로 macOS/Linux와 같은 유형의 문제(#10861)로 보이지만, `ime_fix`를 끄고 확인하지는 않아서 우회가 꼭 필요한지는 미확인 |
+| 조합 중 포커스 상실 | **우회 없이는 글자가 사라짐 (사용자 확인, `BENCH_IME_FIX=0`).** 로그: `Focused(false)` → `Preedit("")` → `Commit("")`(빈 문자열) → `Disabled`. 조합 중이던 "간", "나"가 확정되지 않고 버려집니다. `ime_fix`를 켜면 `Focused(false)` 직전에 글자를 확정해 보존됩니다(이때는 뒤이어 `Commit("누")`가 왔는데, 끈 경우와 달라진 이유는 확인하지 못함). Slint #10861과 같은 증상 |
 | 한자 변환 | 조합 중 "위"에서 방향키와 Enter로 `Commit("爲")` 확인 |
 | 이모지 | 이모지 피커(Win+.)로 입력됨. `Ime Enabled` → `Commit("😊")` → `Disabled`로 도착합니다. macOS와 달리 이 경로는 동작합니다 |
 
